@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Invoice Parser</title>
+<style>
+  :root {
+    --paper: #f1f4f1; --surface: #ffffff; --ink: #12211a; --muted: #55655c; --rule: #c9d4cc;
+    --accent: #1f6b4a; --accent-ink: #ffffff; --tint: #e3efe7; --error: #a63d2f; --error-tint: #f8e9e6;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.5 var(--sans); }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 56px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 26px; }
+  h1 { font: 700 2rem/1.15 var(--serif); margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); max-width: 52ch; }
+  a.link, button { font: inherit; }
+  a.link { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .grid { display: grid; gap: 22px; grid-template-columns: 1fr; align-items: start; }
+  @media (min-width: 860px) { .grid { grid-template-columns: 5fr 7fr; } .intake { position: sticky; top: 20px; } }
+  .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 20px; }
+  h2 { font: 700 1.15rem/1.3 var(--serif); margin: 0 0 12px; }
+
+  .drop { display: block; border: 2px dashed var(--rule); border-radius: 6px; padding: 26px 16px; text-align: center; cursor: pointer; background: var(--paper); transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over, .drop:focus-within { border-color: var(--accent); background: var(--tint); }
+  .drop:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .drop input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .drop strong { display: block; }
+  .drop span { color: var(--muted); font-size: .92rem; }
+  .preview { margin-top: 14px; }
+  .preview img { display: block; max-width: 100%; max-height: 360px; margin: 0 auto; border: 1px solid var(--rule); border-radius: 4px; }
+  .fname { margin: 8px 0 0; font-size: .88rem; color: var(--muted); word-break: break-all; text-align: center; }
+  .actions { display: flex; gap: 10px; margin-top: 16px; }
+  button { padding: 10px 18px; border-radius: 5px; border: 1px solid var(--accent); cursor: pointer; font-weight: 600; }
+  button.primary { background: var(--accent); color: var(--accent-ink); flex: 1; }
+  button.ghost { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .empty { color: var(--muted); margin: 0; }
+  .busy { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+  .spin { width: 20px; height: 20px; border: 3px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } .drop { transition: none; } }
+  .error { background: var(--error-tint); border-left: 4px solid var(--error); padding: 12px 14px; border-radius: 4px; }
+  .error b { display: block; color: var(--error); }
+  .error p { margin: 4px 0 0; }
+
+  .vendor { font: 700 1.6rem/1.2 var(--serif); margin: 0; }
+  .meta { display: flex; gap: 28px; margin: 10px 0 18px; flex-wrap: wrap; }
+  .meta div span { display: block; font-size: .85rem; color: var(--muted); }
+  .meta div b { font-weight: 600; }
+  .na { color: var(--muted); font-style: italic; font-weight: 400 !important; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--rule); }
+  th { font-size: .88rem; color: var(--muted); font-weight: 600; border-bottom: 2px solid var(--ink); }
+  th.num, td.num { text-align: right; }
+  .totalrow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 4px double var(--ink); margin-top: 6px; padding-top: 12px; }
+  .totalrow span { color: var(--muted); }
+  .total { font: 700 2.4rem/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+  details { margin-top: 18px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  pre { background: var(--paper); border: 1px solid var(--rule); padding: 12px; border-radius: 4px; overflow-x: auto; font-size: .85rem; margin: 10px 0 0; }
+
+  .history { margin-top: 22px; }
+  .history ul { list-style: none; margin: 0; padding: 0; }
+  .history li + li { border-top: 1px solid var(--rule); }
+  .history button { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left; background: none; border: 0; padding: 10px 4px; color: var(--ink); font-weight: 500; }
+  .history button:hover { background: var(--tint); }
+  .history small { color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Smart Invoice Parser</h1>
+      <p>Upload a photo or scan of an invoice or receipt. A vision model reads it and returns the vendor, date, items and total as clean data.</p>
+    </div>
+    <a class="link" id="csvLink" href="#">Download CSV of all parsed invoices</a>
+  </header>
+
+  <div class="grid">
+    <section class="panel intake" aria-label="Upload">
+      <h2>Invoice image</h2>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/*">
+        <strong>Drop an image here, or click to choose one</strong>
+        <span>PNG or JPG. You can also paste a screenshot.</span>
+      </label>
+      <div class="preview" id="preview" hidden>
+        <img id="img" alt="Preview of the selected invoice">
+        <p class="fname" id="fname"></p>
+      </div>
+      <div class="actions">
+        <button class="primary" id="go" disabled>Extract data</button>
+        <button class="ghost" id="clear" disabled>Clear</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Extracted data">
+      <h2>Extracted data</h2>
+      <div id="out" aria-live="polite"><p class="empty">Choose an invoice image and select Extract data. The results appear here.</p></div>
+    </section>
+  </div>
+
+  <section class="panel history" id="historyBox" hidden>
+    <h2>Parsed in this session</h2>
+    <ul id="history"></ul>
+  </section>
+</div>
+
+<script>
+  // When opened straight from disk, talk to the local API; when served by FastAPI, use the same origin.
+  const API = location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+  const $ = (id) => document.getElementById(id);
+  const out = $("out");
+  let file = null, previewUrl = null;
+  const history = [];
+
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    Object.assign(n, props || {});
+    kids.flat().forEach((k) => n.append(k));
+    return n;
+  }
+  const na = () => el("span", { className: "na", textContent: "Not found" });
+  const val = (v) => (v === null || v === undefined || v === "" ? na() : String(v));
+
+  function money(n, cur) {
+    if (typeof n !== "number") return null;
+    if (typeof cur === "string" && /^[A-Za-z]{3}$/.test(cur)) {
+      try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur.toUpperCase() }).format(n); } catch (e) { /* fall through */ }
+    }
+    return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function setFile(f) {
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      showError("That file is not an image", "Choose a PNG or JPG of an invoice or receipt.");
+      return;
+    }
+    file = f;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(f);
+    $("img").src = previewUrl;
+    $("fname").textContent = f.name;
+    $("preview").hidden = false;
+    $("go").disabled = false;
+    $("clear").disabled = false;
+    out.replaceChildren(el("p", { className: "empty", textContent: "Ready. Select Extract data to read this invoice." }));
+  }
+
+  function clearAll() {
+    file = null;
+    $("file").value = "";
+    $("preview").hidden = true;
+    $("go").disabled = true;
+    $("clear").disabled = true;
+    out.replaceChildren(el("p", { className: "empty", textContent: "Choose an invoice image and select Extract data. The results appear here." }));
+  }
+
+  function showError(title, text) {
+    out.replaceChildren(el("div", { className: "error", role: "alert" }, el("b", { textContent: title }), el("p", { textContent: text })));
+  }
+
+  function render(d) {
+    const cur = d.currency;
+    const rows = Array.isArray(d.items) ? d.items : [];
+    const tbody = el("tbody");
+    if (rows.length === 0) tbody.append(el("tr", {}, el("td", { colSpan: 3 }, na())));
+    rows.forEach((it) => tbody.append(el("tr", {},
+      el("td", {}, val(it.description)),
+      el("td", { className: "num" }, val(it.quantity)),
+      el("td", { className: "num" }, money(it.price, cur) || na()))));
+    const table = el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { textContent: "Description" }), el("th", { className: "num", textContent: "Qty" }), el("th", { className: "num", textContent: "Price" }))),
+      tbody);
+    out.replaceChildren(
+      el("p", { className: "vendor" }, val(d.vendor)),
+      el("div", { className: "meta" },
+        el("div", {}, el("span", { textContent: "Date" }), el("b", {}, val(d.date))),
+        el("div", {}, el("span", { textContent: "Currency" }), el("b", {}, val(cur)))),
+      el("div", { className: "scroll" }, table),
+      el("div", { className: "totalrow" }, el("span", { textContent: "Total" }), el("div", { className: "total" }, money(d.total, cur) || na())),
+      el("details", {}, el("summary", { textContent: "Show raw JSON" }), el("pre", { textContent: JSON.stringify(d, null, 2) })));
+  }
+
+  function renderHistory() {
+    $("historyBox").hidden = history.length === 0;
+    $("history").replaceChildren(...history.map((h) => el("li", {},
+      el("button", { type: "button", onclick: () => render(h.data) },
+        el("span", { textContent: h.name + (h.data.vendor ? " - " + h.data.vendor : "") }),
+        el("small", { textContent: money(h.data.total, h.data.currency) || "no total" })))));
+  }
+
+  async function extract() {
+    if (!file) return;
+    $("go").disabled = true;
+    out.replaceChildren(el("div", { className: "busy" }, el("div", { className: "spin" }), el("span", { textContent: "Reading the invoice. This usually takes a few seconds." })));
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(API + "/parse-invoice", { method: "POST", body: fd });
+      if (!r.ok) {
+        let detail = "";
+        try { detail = (await r.json()).detail || ""; } catch (e) { /* not JSON */ }
+        if (r.status === 400) return showError("The server rejected the file", detail || "Upload a PNG or JPG image.");
+        return showError("The server could not parse this invoice",
+          detail || "Check the terminal running uvicorn. Common causes are a missing or invalid GROQ_API_KEY and a model name that is no longer available.");
+      }
+      const data = await r.json();
+      if (data.extracted && data.extracted.error) return showError("The model replied in an unexpected format", "Try again, or use a clearer image.");
+      render(data.extracted);
+      history.unshift({ name: data.filename, data: data.extracted });
+      history.length = Math.min(history.length, 10);
+      renderHistory();
+    } catch (e) {
+      showError("Can\u2019t reach the API", "Start the server with: uvicorn app.main:app --reload. Then open http://127.0.0.1:8000/ui/");
+    } finally {
+      $("go").disabled = !file;
+    }
+  }
+
+  $("csvLink").href = API + "/download-csv";
+  $("file").addEventListener("change", (e) => setFile(e.target.files[0]));
+  $("go").addEventListener("click", extract);
+  $("clear").addEventListener("click", clearAll);
+  const drop = $("drop");
+  ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => setFile(e.dataTransfer.files[0]));
+  document.addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])][0]; if (f) setFile(f); });
+</script>
+</body>
+</html>
